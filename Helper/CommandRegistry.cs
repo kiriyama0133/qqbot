@@ -1,44 +1,69 @@
 ﻿using qqbot.Abstractions;
+using qqbot.Core.Services;
 namespace qqbot.Helper;
 
 /// <summary>
-/// 一个单例服务，负责在启动时发现并存储所有已注册的命令。
+/// 一个后台托管服务，负责在应用启动时发现所有命令，
+/// 并将它们注册到全局的 IDynamicStateService 中。
 /// </summary>
-public class CommandRegistry
+public class CommandRegistry : IHostedService
 {
-    /// <summary>
-    /// 暴露一个将命令主名称映射到其完整定义的字典
-    /// </summary>
-    public IReadOnlyDictionary<string, CommandDefinition> Commands { get; private set; }
-
     private readonly ILogger<CommandRegistry> _logger;
     private readonly IServiceProvider _serviceProvider;
+    private readonly IDynamicStateService _stateService;
 
-    public CommandRegistry(ILogger<CommandRegistry> logger, IServiceProvider serviceProvider)
+    public CommandRegistry(
+        ILogger<CommandRegistry> logger,
+        IServiceProvider serviceProvider,
+        IDynamicStateService stateService) // 注入全局状态服务
     {
         _logger = logger;
         _serviceProvider = serviceProvider;
-        Commands = new Dictionary<string, CommandDefinition>();
+        _stateService = stateService;
     }
 
-    public void Initialize()
+    public Task StartAsync(CancellationToken cancellationToken)
     {
-        _logger.LogInformation("开始从 DI 容器中发现并注册命令...");
-        var commandHandlers = _serviceProvider.GetServices<ICommandHandler>();
+        _logger.LogInformation("开始从 DI 容器中发现并注册命令到全局状态...");
 
-        var tempMap = new Dictionary<string, CommandDefinition>();
-        foreach (var handler in commandHandlers)
+        // 为了避免在构造函数中进行重量级操作，我们在 StartAsync 中创建作用域
+        using (var scope = _serviceProvider.CreateScope())
         {
-            var cmdDef = handler.Command;
-            if (cmdDef == null || string.IsNullOrEmpty(cmdDef.Name)) continue;
+            var commandHandlers = scope.ServiceProvider.GetServices<ICommandHandler>();
+            var tempMap = new Dictionary<string, CommandDefinition>();
 
-            // 只将主命令名作为 Key，确保每个命令定义只有一个入口
-            if (!tempMap.TryAdd(cmdDef.Name, cmdDef))
+            foreach (var handler in commandHandlers)
             {
-                _logger.LogWarning("命令冲突: 命令 '{Command}' 已被注册。", cmdDef.Name);
+                var cmdDef = handler.Command;
+                if (cmdDef == null || string.IsNullOrEmpty(cmdDef.Name)) continue;
+
+                // ... (之前的命令冲突检查逻辑保持不变) ...
+                if (!tempMap.TryAdd(cmdDef.Name, cmdDef))
+                {
+                    _logger.LogWarning("命令冲突: 命令 '{Command}' 已被注册。", cmdDef.Name);
+                }
             }
+
+            // 设置到全局状态服务中
+            _stateService.SetState(StateKeys.Commands, tempMap);
+
+            _logger.LogInformation("✅ [CommandRegistry] 成功将 {Count} 个主命令注册到全局状态。", tempMap.Count);
         }
-        Commands = tempMap;
-        _logger.LogInformation("✅ [CommandRegistry] 成功发现并注册了 {Count} 个主命令。", Commands.Count);
+
+        return Task.CompletedTask;
     }
+
+    // StopAsync 对于这个一次性任务来说，无需实现
+    public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+}
+
+/// <summary>
+/// 定义所有全局状态的键
+/// </summary>
+public static class StateKeys
+{
+    /// <summary>
+    /// 存储所有已注册命令的字典
+    /// </summary>
+    public const string Commands = "Commands.Map";
 }

@@ -1,5 +1,6 @@
 ﻿using MediatR;
 using qqbot.Abstractions;
+using qqbot.Core.Services;
 using qqbot.Models;
 using qqbot.Models.Notifications;
 using qqbot.Services;
@@ -21,11 +22,14 @@ public class HelpHandler :
 
     private readonly CommandRegistry _commandRegistry;
     private readonly NapCatApiService _napCatApiService;
+    private readonly IDynamicStateService _stateService;
 
-    public HelpHandler(CommandRegistry commandRegistry, NapCatApiService napCatApiService)
+    public HelpHandler(IDynamicStateService stateService, CommandRegistry commandRegistry, NapCatApiService napCatApiService)
     {
         _commandRegistry = commandRegistry;
         _napCatApiService = napCatApiService;
+        _stateService = stateService;
+
     }
 
     public async Task Handle(GroupMessageReceivedNotification notification, CancellationToken cancellationToken)
@@ -63,12 +67,16 @@ public class HelpHandler :
         builder.AppendLine("--- 机器人可用命令 ---");
 
         // 从 Commands 字典中获取命令定义
-        var sortedCommands = _commandRegistry.Commands.Values.OrderBy(c => c.Name);
+        var commandMap = _stateService.GetState<IReadOnlyDictionary<string, CommandDefinition>>(StateKeys.Commands);
 
-        foreach (var commandDef in sortedCommands)
+        if (commandMap != null)
         {
-            // 调用递归辅助方法来格式化每个命令及其子命令
-            FormatCommand(builder, commandDef, 0);
+            var sortedCommands = commandMap.Values.OrderBy(c => c.Name);
+            foreach (var commandDef in sortedCommands)
+            {
+                // 调用递归辅助方法来格式化每个命令及其子命令
+                FormatCommand(builder, commandDef, 0);
+            } 
         }
         return builder.ToString();
     }

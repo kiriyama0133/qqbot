@@ -5,7 +5,8 @@ using qqbot.Helper.HttpHandlers;
 using qqbot.Models;
 using qqbot.Services;
 using System.Reflection;
-using System.Net.Http; // 确保 using
+using System.Net.Http;
+using qqbot.Core.Services; // 确保 using
 
 namespace qqbot
 {
@@ -20,6 +21,9 @@ namespace qqbot
             var pluginAssemblies = PluginLoaderExtensions.DiscoverPluginAssemblies();
             var allAssemblies = new List<Assembly> { typeof(Program).Assembly };
             allAssemblies.AddRange(pluginAssemblies);
+            services.AddMemoryCache(); // 添加内存缓存
+            services.AddSingleton<IGlobalStateService, GlobalStateService>(); // 添加全局状态服务
+            services.AddSingleton<IDynamicStateService, DynamicStateService>(); // 添加动态状态服务
 
             // 统一注册所有 Handlers (包括主程序和所有插件的)
             Console.WriteLine("开始注册命令处理器 (Command Handlers)...");
@@ -39,6 +43,7 @@ namespace qqbot
             services.Configure<WebSocketSettings>(configuration.GetSection("WebSocketClientSettings"));
             services.Configure<HttpServiceSettings>(configuration.GetSection("HttpServiceSettings"));
             services.AddHostedService<EventWebSocketClient>();
+            services.AddHostedService<CommandRegistry>(); // 
             services.AddSingleton<CommandRegistry>(); // CommandRegistry 现在可以被安全地创建
 
             // 注册 HttpClient 管道
@@ -54,7 +59,6 @@ namespace qqbot
 
             // 在应用构建完成后，DI 容器完全可用，此时再初始化命令注册处
             var commandRegistry = app.Services.GetRequiredService<CommandRegistry>();
-            commandRegistry.Initialize();
 
 
             // 配置 HTTP 请求管道
