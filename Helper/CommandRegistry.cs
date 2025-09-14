@@ -24,9 +24,9 @@ public class CommandRegistry : IHostedService
 
     public Task StartAsync(CancellationToken cancellationToken)
     {
-        _logger.LogInformation("开始从 DI 容器中发现并注册命令到全局状态...");
+        _logger.LogInformation("开始发现并注册命令到全局状态...");
 
-        // 为了避免在构造函数中进行重量级操作，我们在 StartAsync 中创建作用域
+        // 创建作用域
         using (var scope = _serviceProvider.CreateScope())
         {
             var commandHandlers = scope.ServiceProvider.GetServices<ICommandHandler>();
@@ -37,7 +37,7 @@ public class CommandRegistry : IHostedService
                 var cmdDef = handler.Command;
                 if (cmdDef == null || string.IsNullOrEmpty(cmdDef.Name)) continue;
 
-                // ... (之前的命令冲突检查逻辑保持不变) ...
+                // 命令冲突检测
                 if (!tempMap.TryAdd(cmdDef.Name, cmdDef))
                 {
                     _logger.LogWarning("命令冲突: 命令 '{Command}' 已被注册。", cmdDef.Name);
