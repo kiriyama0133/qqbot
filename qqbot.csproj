@@ -79,8 +79,5 @@
 	<Folder Include="Python\" />
   </ItemGroup>
 
-  <ItemGroup>
-    <ProjectReference Include="..\qqbot.Abstractions\qqbot.Abstractions.csproj" />
-  </ItemGroup>
 
 </Project>
