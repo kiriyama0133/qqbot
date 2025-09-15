@@ -22,12 +22,15 @@ namespace qqbot
             services.AddMemoryCache(); // 添加内存缓存
             services.AddSingleton<IGlobalStateService, GlobalStateService>(); // 添加全局状态服务
             services.AddSingleton<IDynamicStateService, DynamicStateService>(); // 添加动态状态服务
+            services.AddSingleton<StateMonitorService>(); // 添加状态监控服务
+            services.AddHostedService<StateMonitorService>(provider => provider.GetRequiredService<StateMonitorService>()); // 添加状态监控服务作为后台服务
             
             // 注册Python插件管理服务
             Console.WriteLine("注册Python插件管理服务...");
             services.AddSingleton<PluginDiscoveryService>(); // 插件发现服务
             services.AddSingleton<PythonEnvManager>(); // Python环境管理器
             services.AddSingleton<PythonProcessManager>(); // Python进程管理器
+            services.AddSingleton<PluginStateManager>(); // 插件状态管理器
             Console.WriteLine("  -> Python插件管理服务注册完成");
 
             // 先只注册主程序的Handlers，插件Handlers将在文件复制完成后注册
@@ -65,72 +68,14 @@ namespace qqbot
 
             // 在应用构建完成后，DI 容器完全可用，此时再初始化插件系统
             Console.WriteLine("开始初始化插件系统...");
-            var pluginDiscovery = app.Services.GetRequiredService<PluginDiscoveryService>();
-            var pythonEnvManager = app.Services.GetRequiredService<PythonEnvManager>();
-            var pythonProcessManager = app.Services.GetRequiredService<PythonProcessManager>();
+            var pluginStateManager = app.Services.GetRequiredService<PluginStateManager>();
             
             // 异步初始化插件系统
             _ = Task.Run(async () =>
             {
                 try
                 {
-                    Console.WriteLine("发现和复制插件文件...");
-                    var discoveredPlugins = await pluginDiscovery.DiscoverPluginsAsync();
-                    
-                    Console.WriteLine("发现插件程序集...");
-                    var pluginAssemblies = PluginLoaderExtensions.DiscoverPluginAssemblies();
-                    var allAssemblies = new List<Assembly> { typeof(Program).Assembly };
-                    allAssemblies.AddRange(pluginAssemblies);
-                    
-                    Console.WriteLine("发现插件命令处理器...");
-                    var pluginCommandHandlerTypes = pluginAssemblies.SelectMany(a => a.GetTypes())
-                        .Where(t => typeof(ICommandHandler).IsAssignableFrom(t) && !t.IsInterface && !t.IsAbstract);
-
-                    Console.WriteLine($"  -> 发现 {pluginCommandHandlerTypes.Count()} 个插件命令处理器:");
-                    foreach (var handlerType in pluginCommandHandlerTypes)
-                    {
-                        Console.WriteLine($"    - {handlerType.Name}");
-                    }
-                    
-                    Console.WriteLine("插件程序集发现完成");
-                    Console.WriteLine($"  -> 发现 {pluginAssemblies.Count} 个插件程序集");
-                    Console.WriteLine("  -> 注意：插件命令处理器需要在应用启动时重新注册才能生效");
-                    
-                    if (discoveredPlugins.Count == 0)
-                    {
-                        Console.WriteLine("未发现任何插件");
-                        return;
-                    }
-                    
-                    Console.WriteLine($"初始化 {discoveredPlugins.Count} 个插件:");
-                    foreach (var plugin in discoveredPlugins)
-                    {
-                        Console.WriteLine($"  - {plugin.Id} (类型: {plugin.Type})");
-                        
-                        // 为Python插件设置环境
-                        if (plugin.Type == PluginType.Python || plugin.Type == PluginType.Hybrid)
-                        {
-                            try
-                            {
-                                var envDirectory = Path.Combine(AppContext.BaseDirectory, "Envs", plugin.Id);
-                                Directory.CreateDirectory(envDirectory);
-                                
-                                var toolInfo = new PythonToolInfo
-                                {
-                                    Script = Path.GetFileName(plugin.MainScript ?? "main.py"),
-                                    Requirements = plugin.RequirementsFile ?? Path.Combine(plugin.SourceDirectory, "requirements.txt")
-                                };
-                                
-                                var pythonExePath = pythonEnvManager.SetupEnvironmentForPlugin(envDirectory, toolInfo);
-                                Console.WriteLine($"  ✅ {plugin.Id} 环境设置完成: {pythonExePath}");
-                            }
-                            catch (Exception ex)
-                            {
-                                Console.WriteLine($"  ❌ {plugin.Id} 环境设置失败: {ex.Message}");
-                            }
-                        }
-                    }
-                    
+                    await pluginStateManager.InitializeAsync();
                     Console.WriteLine("✅ 插件系统初始化完成");
                 }
                 catch (Exception ex)

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text.Json;
 
 namespace qqbot.Services.Plugins;
 
@@ -115,6 +116,9 @@ public class PluginDiscoveryService
                 }
             }
 
+            // 读取plugin.json文件（如果存在）
+            await LoadPluginJsonAsync(plugin, pluginDirectory);
+
             return plugin.Type != PluginType.Unknown ? plugin : null;
         }
         catch (Exception ex)
@@ -168,11 +172,11 @@ public class PluginDiscoveryService
     {
         _logger.LogInformation("开始自动发现和复制插件文件...");
         
-        // 定义要扫描的目录列表
+        // 定义要扫描的源目录列表
         var scanDirectories = new[]
         {
-            Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "Test"), // Test目录
-            Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "Test"), // 上级Test目录
+            Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "PythonLauncherTest", "Test"), // PythonLauncherTest/Test目录
+            Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "PythonLauncherTest", "Test"), // 上级PythonLauncherTest/Test目录
             Path.Combine(AppContext.BaseDirectory, "Test"), // 当前目录下的Test
             Path.Combine(AppContext.BaseDirectory, "Plugins"), // 当前Plugins目录
         };
@@ -300,6 +304,42 @@ public class PluginDiscoveryService
     }
 
     /// <summary>
+    /// 读取plugin.json文件并填充插件信息
+    /// </summary>
+    private async Task LoadPluginJsonAsync(DiscoveredPlugin plugin, string pluginDirectory)
+    {
+        try
+        {
+            var pluginJsonPath = Path.Combine(pluginDirectory, "plugin.json");
+            if (File.Exists(pluginJsonPath))
+            {
+                var jsonContent = await File.ReadAllTextAsync(pluginJsonPath);
+                var pluginInfo = System.Text.Json.JsonSerializer.Deserialize<PluginJsonInfo>(jsonContent, new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                });
+
+                if (pluginInfo != null)
+                {
+                    plugin.PluginJsonFile = pluginJsonPath;
+                    plugin.Name = pluginInfo.Name ?? plugin.Id;
+                    plugin.Version = pluginInfo.Version;
+                    plugin.Description = pluginInfo.Description;
+                    plugin.Author = pluginInfo.Author;
+                    plugin.Dependencies = pluginInfo.Dependencies?.ToArray() ?? Array.Empty<string>();
+                    
+                    _logger.LogDebug("已读取插件信息: {PluginId} - {Name} v{Version}", 
+                        plugin.Id, plugin.Name, plugin.Version);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "读取plugin.json文件失败: {PluginId}", plugin.Id);
+        }
+    }
+
+    /// <summary>
     /// 获取插件的工作目录（用于Python环境）
     /// </summary>
     public string GetPluginWorkingDirectory(string pluginId)
@@ -322,6 +362,14 @@ public class DiscoveredPlugin
     public string? MainScript { get; set; }
     public string? RequirementsFile { get; set; }
     public string? PyProjectFile { get; set; }
+    
+    // 从plugin.json读取的属性
+    public string? Name { get; set; }
+    public string? Version { get; set; }
+    public string? Description { get; set; }
+    public string? Author { get; set; }
+    public string[] Dependencies { get; set; } = Array.Empty<string>();
+    public string? PluginJsonFile { get; set; }
 }
 
 /// <summary>
@@ -334,4 +382,20 @@ public enum PluginType
     Python,      // Python插件
     Hybrid,      // 混合插件（同时包含.NET和Python）
     Configuration // 配置插件
+}
+
+/// <summary>
+/// plugin.json文件的信息结构
+/// </summary>
+public class PluginJsonInfo
+{
+    public string? Id { get; set; }
+    public string? Name { get; set; }
+    public string? Version { get; set; }
+    public string? Description { get; set; }
+    public string? Type { get; set; }
+    public string? MainScript { get; set; }
+    public string? Requirements { get; set; }
+    public string? Author { get; set; }
+    public List<string>? Dependencies { get; set; }
 }

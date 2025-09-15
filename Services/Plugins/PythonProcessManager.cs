@@ -1,5 +1,6 @@
 ﻿using System.Collections.Concurrent;
 using System.Diagnostics;
+using qqbot.Core.Services;
 
 namespace qqbot.Services.Plugins;
 
@@ -15,14 +16,16 @@ public class PythonProcessManager : IDisposable
 {
     private readonly ILogger<PythonProcessManager> _logger;
     private readonly ILoggerFactory _loggerFactory;
+    private readonly IDynamicStateService? _stateService;
     private readonly ConcurrentDictionary<string, PythonProcessPool> _processPools = new();
     private readonly PythonProcessPoolSettings _defaultSettings;
     private bool _disposed = false;
 
-    public PythonProcessManager(ILogger<PythonProcessManager> logger, ILoggerFactory loggerFactory)
+    public PythonProcessManager(ILogger<PythonProcessManager> logger, ILoggerFactory loggerFactory, IDynamicStateService? stateService = null)
     {
         _logger = logger;
         _loggerFactory = loggerFactory;
+        _stateService = stateService;
         _defaultSettings = new PythonProcessPoolSettings
         {
             MinPoolSize = 1,
@@ -72,6 +75,35 @@ public class PythonProcessManager : IDisposable
         if (_processPools.TryGetValue(processKey, out var pool))
         {
             pool.ReturnWorker(worker);
+            UpdateProcessPoolState(processKey, pool);
+        }
+    }
+
+    /// <summary>
+    /// 更新进程池状态到全局状态管理
+    /// </summary>
+    private void UpdateProcessPoolState(string processKey, PythonProcessPool pool)
+    {
+        if (_stateService == null) return;
+
+        try
+        {
+            var poolState = new PythonProcessPoolState
+            {
+                PoolKey = processKey,
+                ActiveWorkers = pool.GetActiveWorkerCount(),
+                IdleWorkers = pool.GetIdleWorkerCount(),
+                TotalWorkers = pool.GetTotalWorkerCount(),
+                IsHealthy = pool.IsHealthy(),
+                LastHealthCheck = DateTime.UtcNow,
+                WorkerIds = pool.GetWorkerIds()
+            };
+
+            _stateService.SetState($"{PluginStateKeys.PythonProcessPools}.{processKey}", poolState);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "更新进程池状态失败: {ProcessKey}", processKey);
         }
     }
 

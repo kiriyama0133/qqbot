@@ -6,7 +6,7 @@ namespace qqbot.Core.Services
 {
     public class DynamicStateService : IDynamicStateService, IDisposable
     {
-        // 使用并发字典来线程安全地存储每个状态键的“主题”
+        // 并发字典来线程安全地存储每个状态键的“主题”
         private readonly ConcurrentDictionary<string, ISubject<object>> _stateSubjects
             = new ConcurrentDictionary<string, ISubject<object>>();
 

@@ -227,6 +227,46 @@ public class PythonProcessPool : IDisposable
         return Task.FromResult(cleanedCount);
     }
 
+    /// <summary>
+    /// 获取活跃工作器数量
+    /// </summary>
+    public int GetActiveWorkerCount()
+    {
+        return _workers.Values.Count(w => w.IsBusy);
+    }
+
+    /// <summary>
+    /// 获取空闲工作器数量
+    /// </summary>
+    public int GetIdleWorkerCount()
+    {
+        return _workers.Values.Count(w => !w.IsBusy && w.IsHealthy());
+    }
+
+    /// <summary>
+    /// 获取总工作器数量
+    /// </summary>
+    public int GetTotalWorkerCount()
+    {
+        return _workers.Count;
+    }
+
+    /// <summary>
+    /// 检查进程池是否健康
+    /// </summary>
+    public bool IsHealthy()
+    {
+        return _workers.Values.Any(w => w.IsHealthy());
+    }
+
+    /// <summary>
+    /// 获取所有工作器ID
+    /// </summary>
+    public List<string> GetWorkerIds()
+    {
+        return _workers.Keys.ToList();
+    }
+
     public void Dispose()
     {
         if (_disposed) return;

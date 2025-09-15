@@ -10,6 +10,7 @@
     <None Remove="Envs\readme.txt" />
     <None Remove="ExtensionsEntry\readme.txt" />
     <None Remove="Plugins\readme.txt" />
+    <None Remove="Publics\defalut.jpg" />
   </ItemGroup>
 	
 <ItemGroup>
@@ -26,6 +27,9 @@
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
     <Content Include="Plugins\readme.txt">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Publics\defalut.jpg">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
   </ItemGroup>

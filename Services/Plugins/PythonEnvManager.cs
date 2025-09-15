@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using qqbot.Core.Services;
 
 namespace qqbot.Services.Plugins;
 
@@ -12,10 +13,12 @@ public class PythonEnvManager
     private readonly string _bootstrapUvExePath;
     private readonly string _bootstrapPoetryExePath;
     private readonly ILogger<PythonEnvManager> _logger;
+    private readonly IDynamicStateService? _stateService;
 
-    public PythonEnvManager(ILogger<PythonEnvManager> logger)
+    public PythonEnvManager(ILogger<PythonEnvManager> logger, IDynamicStateService? stateService = null)
     {
         _logger = logger;
+        _stateService = stateService;
 
         // 构造内嵌的“工具箱”环境的绝对路径
         _bootstrapEnvPath = Path.Combine(AppContext.BaseDirectory, "Python", ".bot","Scripts");
@@ -99,7 +102,89 @@ public class PythonEnvManager
         }
 
         _logger.LogInformation("✅ 插件 '{PluginId}' 的 Python 环境已就绪！", pluginId);
+        
+        // 更新环境状态到全局状态管理
+        UpdateEnvironmentState(pluginId, pluginDirectory, pythonInVenvPath, true);
+        
         return pythonInVenvPath;
+    }
+
+    /// <summary>
+    /// 更新环境状态到全局状态管理
+    /// </summary>
+    private void UpdateEnvironmentState(string pluginId, string environmentPath, string pythonExecutablePath, bool isSetup)
+    {
+        if (_stateService == null) return;
+
+        try
+        {
+            var envState = new PythonEnvironmentState
+            {
+                PluginId = pluginId,
+                EnvironmentPath = environmentPath,
+                PythonExecutablePath = pythonExecutablePath,
+                IsSetup = isSetup,
+                LastSetupTime = DateTime.UtcNow,
+                InstalledPackages = GetInstalledPackages(pythonExecutablePath)
+            };
+
+            _stateService.SetState($"{PluginStateKeys.PythonEnvManager}.{pluginId}", envState);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "更新Python环境状态失败: {PluginId}", pluginId);
+        }
+    }
+
+    /// <summary>
+    /// 获取已安装的包列表
+    /// </summary>
+    private List<string> GetInstalledPackages(string pythonExecutablePath)
+    {
+        try
+        {
+            var result = ExecuteCommandWithOutput(pythonExecutablePath, "-m pip list --format=freeze");
+            return result.Split('\n', StringSplitOptions.RemoveEmptyEntries)
+                .Where(line => line.Contains("=="))
+                .Select(line => line.Split("==")[0])
+                .ToList();
+        }
+        catch
+        {
+            return new List<string>();
+        }
+    }
+
+    /// <summary>
+    /// 执行命令并返回输出结果
+    /// </summary>
+    private string ExecuteCommandWithOutput(string fileName, string arguments, string? workingDirectory = null)
+    {
+        var process = new Process
+        {
+            StartInfo = new ProcessStartInfo
+            {
+                FileName = fileName,
+                Arguments = arguments,
+                WorkingDirectory = workingDirectory ?? Directory.GetCurrentDirectory(),
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true
+            }
+        };
+
+        process.Start();
+        var output = process.StandardOutput.ReadToEnd();
+        var error = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+
+        if (process.ExitCode != 0)
+        {
+            throw new InvalidOperationException($"命令执行失败: {error}");
+        }
+
+        return output;
     }
 
     /// <summary>
