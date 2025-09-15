@@ -10,17 +10,14 @@ public class PluginDiscoveryService
 {
     private readonly ILogger<PluginDiscoveryService> _logger;
     private readonly string _extensionsEntryPath;
-    private readonly string _pluginsPath;
 
     public PluginDiscoveryService(ILogger<PluginDiscoveryService> logger)
     {
         _logger = logger;
         _extensionsEntryPath = Path.Combine(AppContext.BaseDirectory, "ExtensionsEntry");
-        _pluginsPath = Path.Combine(AppContext.BaseDirectory, "Plugins");
         
         // 确保目录存在
         Directory.CreateDirectory(_extensionsEntryPath);
-        Directory.CreateDirectory(_pluginsPath);
         
         // 自动发现和复制插件文件
         AutoDiscoverAndCopyPlugins();
@@ -178,7 +175,6 @@ public class PluginDiscoveryService
             Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "PythonLauncherTest", "Test"), // PythonLauncherTest/Test目录
             Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "PythonLauncherTest", "Test"), // 上级PythonLauncherTest/Test目录
             Path.Combine(AppContext.BaseDirectory, "Test"), // 当前目录下的Test
-            Path.Combine(AppContext.BaseDirectory, "Plugins"), // 当前Plugins目录
         };
 
         foreach (var scanDir in scanDirectories)

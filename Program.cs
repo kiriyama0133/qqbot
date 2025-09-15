@@ -33,9 +33,11 @@ public class Program
         services.AddSingleton<PluginStateManager>(); // 插件状态管理器
         Console.WriteLine("  -> Python插件管理服务注册完成");
 
-        // 先只注册主程序的Handlers，插件Handlers将在文件复制完成后注册
-        Console.WriteLine("开始注册主程序命令处理器...");
+        // 注册主程序和插件的Handlers
+        Console.WriteLine("开始注册命令处理器...");
         var mainAssembly = typeof(Program).Assembly;
+        
+        // 注册主程序的命令处理器
         var mainCommandHandlerTypes = mainAssembly.GetTypes()
             .Where(t => typeof(ICommandHandler).IsAssignableFrom(t) && !t.IsInterface && !t.IsAbstract);
 
@@ -45,8 +47,78 @@ public class Program
             Console.WriteLine($"  -> 已注册主程序命令处理器: {handlerType.Name}");
         }
 
-        // 先注册主程序的MediatR
-        services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(mainAssembly));
+        // 发现并注册插件程序集中的命令处理器
+        Console.WriteLine("发现并注册插件命令处理器...");
+        var pluginAssemblies = PluginLoaderExtensions.DiscoverPluginAssemblies();
+        foreach (var assembly in pluginAssemblies)
+        {
+            try
+            {
+                // 注册插件中的服务类型
+                var serviceTypes = assembly.GetTypes()
+                    .Where(t => typeof(IPluginService).IsAssignableFrom(t) && !t.IsInterface && !t.IsAbstract);
+
+                foreach (var serviceType in serviceTypes)
+                {
+                    try
+                    {
+                        services.AddScoped(serviceType);
+                        Console.WriteLine($"  -> 已注册插件服务: {serviceType.Name} (来自 {assembly.GetName().Name})");
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"  -> 注册插件服务 {serviceType.Name} 时发生错误: {ex.Message}");
+                    }
+                }
+
+                // 调用插件的 ConfigureServices 方法
+                var pluginModuleTypes = assembly.GetTypes()
+                    .Where(t => typeof(BotPluginModule).IsAssignableFrom(t) && !t.IsInterface && !t.IsAbstract);
+
+                foreach (var moduleType in pluginModuleTypes)
+                {
+                    try
+                    {
+                        // 创建插件模块实例并调用 ConfigureServices
+                        var moduleInstance = Activator.CreateInstance(moduleType, 
+                            new object[] { null, null }) as BotPluginModule; // 传入 null 参数，因为我们使用服务定位器
+                        
+                        if (moduleInstance != null)
+                        {
+                            moduleInstance.ConfigureServices(services, configuration);
+                            Console.WriteLine($"  -> 已配置插件服务: {moduleType.Name} (来自 {assembly.GetName().Name})");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"  -> 配置插件服务 {moduleType.Name} 时发生错误: {ex.Message}");
+                    }
+                }
+
+                // 然后注册命令处理器
+                var pluginHandlerTypes = assembly.GetTypes()
+                    .Where(t => typeof(ICommandHandler).IsAssignableFrom(t) && !t.IsInterface && !t.IsAbstract);
+
+                foreach (var handlerType in pluginHandlerTypes)
+                {
+                    services.AddTransient(typeof(ICommandHandler), handlerType);
+                    Console.WriteLine($"  -> 已注册插件命令处理器: {handlerType.Name} (来自 {assembly.GetName().Name})");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"  -> 扫描插件程序集 {assembly.GetName().Name} 时发生错误: {ex.Message}");
+            }
+        }
+
+        // 注册主程序和插件的MediatR
+        services.AddMediatR(cfg => {
+            cfg.RegisterServicesFromAssembly(mainAssembly);
+            foreach (var assembly in pluginAssemblies)
+            {
+                cfg.RegisterServicesFromAssembly(assembly);
+            }
+        });
 
         // 注册主程序的核心服务和配置
         services.Configure<WebSocketSettings>(configuration.GetSection("WebSocketClientSettings"));

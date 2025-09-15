@@ -64,6 +64,7 @@ public class PluginStateManager
             pluginSystemState.LoadingStatus = PluginLoadingStatus.Loading;
             _stateService.SetState(PluginStateKeys.DiscoveredPlugins, pluginSystemState);
 
+
             // 初始化Python环境
             _logger.LogInformation("初始化Python环境...");
             await InitializePythonEnvironmentsAsync(discoveredPlugins);
@@ -204,4 +205,5 @@ public class PluginStateManager
     {
         return _stateService.GetState<PythonProcessPoolState>($"{PluginStateKeys.PythonProcessPools}.{poolKey}");
     }
+
 }
