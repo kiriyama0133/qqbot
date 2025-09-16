@@ -18,6 +18,7 @@ namespace qqbot.Models;
 [JsonDerivedType(typeof(AtMessageSegment), "at")]
 [JsonDerivedType(typeof(FaceMessageSegment), "face")]
 [JsonDerivedType(typeof(ReplyMessageSegment), "reply")]
+[JsonDerivedType(typeof(FileMessageSegment), "file")]
 public class MessageSegment
 {
     [JsonPropertyName("type")]
@@ -35,6 +36,13 @@ public class MessageSegment
     public static AtMessageSegment At(string qq) => new() { Data = new AtData { Qq = qq } };
     public static FaceMessageSegment Face(int id) => new() { Data = new FaceData { Id = id.ToString() } };
     public static ReplyMessageSegment Reply(int messageId) => new() { Data = new ReplyData { MessageId = messageId.ToString() } };
+    public static FileMessageSegment File(string file, string fileId, string fileSize) => new() { 
+        Data = new FileData { 
+            File = file, 
+            FileId = fileId, 
+            FileSize = fileSize 
+        } 
+    };
 
     #endregion
 }
@@ -114,6 +122,57 @@ public class ReplyData
 {
     [JsonPropertyName("id")]
     public string MessageId { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// 文件消息段
+/// </summary>
+public class FileMessageSegment : MessageSegment
+{
+    public FileMessageSegment() { Type = "file"; }
+    [JsonPropertyName("data")]
+    public FileData? Data { get; set; }
+}
+public class FileData
+{
+    [JsonPropertyName("file")]
+    public string File { get; set; } = string.Empty;
+    
+    [JsonPropertyName("file_id")]
+    public string FileId { get; set; } = string.Empty;
+    
+    [JsonPropertyName("file_size")]
+    public string FileSize { get; set; } = string.Empty;
+    
+    /// <summary>
+    /// 获取文件的下载URL（基于file_id）
+    /// </summary>
+    public string GetDownloadUrl()
+    {
+        if (string.IsNullOrEmpty(FileId))
+            return string.Empty;
+            
+        // QQ文件下载URL格式（需要根据实际API调整）
+        return $"https://grouptalk.c2c.qq.com/download?file_id={FileId}";
+    }
+    
+    /// <summary>
+    /// 获取文件大小的人类可读格式
+    /// </summary>
+    public string GetFormattedFileSize()
+    {
+        if (string.IsNullOrEmpty(FileSize) || !long.TryParse(FileSize, out long size))
+            return "未知大小";
+            
+        if (size < 1024)
+            return $"{size} B";
+        else if (size < 1024 * 1024)
+            return $"{size / 1024.0:F1} KB";
+        else if (size < 1024 * 1024 * 1024)
+            return $"{size / (1024.0 * 1024.0):F1} MB";
+        else
+            return $"{size / (1024.0 * 1024.0 * 1024.0):F1} GB";
+    }
 }
 
 public class TextMessageSegmentData : MessageSegment
