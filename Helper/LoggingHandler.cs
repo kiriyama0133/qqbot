@@ -1,6 +1,8 @@
-﻿using MediatR;
+﻿using System.Formats.Asn1;
+using Google.Protobuf.WellKnownTypes;
+using MediatR;
 using qqbot.Models.Notifications;
-
+using qqbot.RedisCache;
 namespace qqbot.Helper;
 
 /// <summary>
@@ -12,16 +14,18 @@ public class LoggingHandler :
     INotificationHandler<GroupMessageReceivedNotification>
 {
     private readonly ILogger<LoggingHandler> _logger;
+    private readonly RedisService _redis;
 
-    public LoggingHandler(ILogger<LoggingHandler> logger)
+    public LoggingHandler(ILogger<LoggingHandler> logger, RedisService redis)
     {
         _logger = logger;
+        _redis = redis;
     }
 
     /// <summary>
     /// 处理“私聊消息”通知的方法
     /// </summary>
-    public Task Handle(PrivateMessageReceivedNotification notification, CancellationToken cancellationToken)
+    public async Task Handle(PrivateMessageReceivedNotification notification, CancellationToken cancellationToken)
     {
         // 使用我们之前创建的 MessagePrint 工具来格式化消息
         string formattedMessage = MessagePrint.Format(notification.MessageEvent);
@@ -29,17 +33,19 @@ public class LoggingHandler :
         // 使用标准的 ILogger 来记录结构化日志
         _logger.LogInformation("接收到私聊消息事件:\n{FormattedMessage}", formattedMessage);
 
-        return Task.CompletedTask;
+        await _redis.PushMessageAsync("PrivateMessageQueue", formattedMessage);
+        return; //Task.CompletedTask;
     }
 
     /// <summary>
     /// 处理“群聊消息”通知的方法
     /// </summary>
-    public Task Handle(GroupMessageReceivedNotification notification, CancellationToken cancellationToken)
+    public async Task Handle(GroupMessageReceivedNotification notification, CancellationToken cancellationToken)
     {
         string formattedMessage = MessagePrint.Format(notification.MessageEvent);
         _logger.LogInformation("接收到群聊消息事件:\n{FormattedMessage}", formattedMessage);
+        await _redis.PushMessageAsync("PrivateMessageQueue", formattedMessage);
 
-        return Task.CompletedTask;
+        return; //Task.CompletedTask;
     }
 }
