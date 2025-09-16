@@ -77,7 +77,19 @@ public static class MessagePrint
                 case FaceMessageSegment face: 
                     builder.Append($"[表情:{face.Data?.Id}]");
                     break;
-                // ...
+                case FileMessageSegment file:
+                    var downloadUrl = file.Data?.GetDownloadUrl() ?? "";
+                    var formattedSize = file.Data?.GetFormattedFileSize() ?? "未知大小";
+                    builder.Append($"[文件: {file.Data?.File} (大小: {formattedSize})");
+                    if (!string.IsNullOrEmpty(downloadUrl))
+                    {
+                        builder.Append($" - 下载: {downloadUrl}");
+                    }
+                    builder.Append("]");
+                    break;
+                case ReplyMessageSegment reply:
+                    builder.Append($"[回复: {reply.Data?.MessageId}]");
+                    break;
                 default:
                     builder.Append($"[{segment.Type}: 未知内容]");
                     break;
