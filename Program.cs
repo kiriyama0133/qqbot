@@ -8,7 +8,7 @@ using qqbot.Services.Plugins; // 添加Python插件服务
 using System.Reflection;
 using System.Net.Http;
 using qqbot.Core.Services; // 确保 using
-
+using qqbot.RedisCache;
 namespace qqbot;
 
 public class Program
@@ -136,6 +136,8 @@ public class Program
 
         // 注册 ASP.NET Core 框架服务
         services.AddControllers();
+        services.AddSingleton<RedisService>();
+
         var app = builder.Build();
 
         // 在应用构建完成后，DI 容器完全可用，此时再初始化插件系统
