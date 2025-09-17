@@ -312,10 +312,11 @@ public class StateMonitorService : IHostedService, IDisposable
             try
             {
                 // 使用缩进格式显示JSON
-                var json = JsonSerializer.Serialize(value, new JsonSerializerOptions 
-                { 
+                var json = JsonSerializer.Serialize(value, new JsonSerializerOptions
+                {
                     WriteIndented = true,
-                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+                    Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
                 });
                 
                 // 如果JSON太长，截断显示

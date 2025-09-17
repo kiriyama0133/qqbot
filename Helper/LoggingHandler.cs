@@ -4,6 +4,7 @@ using Google.Protobuf.WellKnownTypes;
 using MediatR;
 using qqbot.Models.Notifications;
 using qqbot.RedisCache;
+
 namespace qqbot.Helper;
 
 /// <summary>
@@ -36,7 +37,7 @@ public class LoggingHandler :
 
         try
         {
-            await _redis.PushMessageAsync("PrivateMessageQueue", formattedMessage);
+            await _redis.PushPrivateMessageAsync("PrivateMessageQueue", notification.MessageEvent);
             _logger.LogInformation("已将消息推送到 Redis 队列 'PrivateMessageQueue'");  
         }
         catch (Exception ex)
@@ -56,7 +57,7 @@ public class LoggingHandler :
         _logger.LogInformation("接收到群聊消息事件:\n{FormattedMessage}", formattedMessage);
         try
         {
-            await _redis.PushMessageAsync("GroupMessageQueue", formattedMessage);
+            await _redis.PushGroupMessageAsync("GroupMessageQueue", notification.MessageEvent);
             _logger.LogInformation("已将消息推送到 Redis 队列 'GroupMessageQueue'"); 
         }
         catch (Exception ex)
