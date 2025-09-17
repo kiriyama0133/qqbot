@@ -31,8 +31,8 @@ namespace qqbot.RedisCache
 
         public RedisService(int db = 0)
         {
-            // 直接使用 RedisManager 获取池化的连接
-            _db = RedisManager.GetDatabase(db);
+            var RedisCacheManager = new RedisManager(new Microsoft.Extensions.Options.OptionsWrapper<Models.RedisSetting>(new Models.RedisSetting { Url = "localhost:6379" }));
+            _db = RedisCacheManager.GetDatabase(db);
         }
         private static readonly JsonSerializerOptions _jsonOptions = new JsonSerializerOptions
         {

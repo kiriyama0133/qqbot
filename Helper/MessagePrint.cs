@@ -91,6 +91,15 @@ public static class MessagePrint
                 case ReplyMessageSegment reply:
                     builder.Append($"[回复: {reply.Data?.MessageId}]");
                     break;
+                case ForwardMessageSegment forward:
+                    var viewUrl = forward.Data?.GetViewUrl() ?? "";
+                    builder.Append($"[聊天记录: {forward.Data?.Id}");
+                    if (!string.IsNullOrEmpty(viewUrl))
+                    {
+                        builder.Append($" - 查看: {viewUrl}");
+                    }
+                    builder.Append("]");
+                    break;
                 default:
                     builder.Append($"[{segment.Type}: 未知内容]");
                     break;
