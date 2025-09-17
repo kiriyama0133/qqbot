@@ -11,11 +11,12 @@ namespace qqbot.RedisCache;
 public class RedisService
 {
     private readonly IDatabase _db;
-
-    public RedisService(int db = 0)
+    private RedisManager _redisManager;
+    public RedisService(RedisManager redisManager, int db = 0)
     {
+        _redisManager = redisManager;
         // 直接使用 RedisManager 获取池化的连接
-        _db = RedisManager.GetDatabase(db);
+        _db = _redisManager.GetDatabase(db);
     }
     public async Task PushMessageAsync(string queue, object message)
     {

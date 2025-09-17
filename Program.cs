@@ -130,6 +130,7 @@ public class Program
         services.AddSingleton<CommandRegistry>(); // CommandRegistry 现在可以被安全地创建
         services.AddSingleton<InfluxDbService>(); // influx数据库
         services.AddSingleton<RedisService>(); // redis服务
+        services.AddSingleton<RedisManager>(); 
         services.AddTransient<FileCacheHttpService>(); // 下载文件的服务
 
         // 注册 HttpClient 管道

@@ -57,9 +57,10 @@ public class FileCacheHttpService : IDisposable
             request.Headers.Range = new RangeHeaderValue(existingFileSize, null);
             _logger.LogInformation("文件已经存在，开始从{Bytes字节下载}", existingFileSize);
         }
+
         // 确保先获取响应头，而不会缓冲整个响应体
         using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
-        if (response.StatusCode == System.Net.HttpStatusCode.OK){ // 不支持范围请求的情况
+        if (response.StatusCode == System.Net.HttpStatusCode.OK){ 
 
             existingFileSize = 0; //
         }
