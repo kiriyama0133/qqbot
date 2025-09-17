@@ -122,10 +122,12 @@ public class Program
 
         // 注册主程序的核心服务和配置
         services.Configure<WebSocketSettings>(configuration.GetSection("WebSocketClientSettings"));
+        services.Configure<InfluxDBSetting>(configuration.GetSection("InfluxDB"));
         services.Configure<HttpServiceSettings>(configuration.GetSection("HttpServiceSettings"));
         services.AddHostedService<EventWebSocketClient>();
         services.AddHostedService<CommandRegistry>(); // 
         services.AddSingleton<CommandRegistry>(); // CommandRegistry 现在可以被安全地创建
+        services.AddSingleton<InfluxDbService>(); // influx数据库
 
         // 注册 HttpClient 管道
         services.AddTransient<AuthHandler>();

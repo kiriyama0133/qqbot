@@ -19,6 +19,7 @@ namespace qqbot.Models;
 [JsonDerivedType(typeof(FaceMessageSegment), "face")]
 [JsonDerivedType(typeof(ReplyMessageSegment), "reply")]
 [JsonDerivedType(typeof(FileMessageSegment), "file")]
+[JsonDerivedType(typeof(ForwardMessageSegment), "forward")]
 public class MessageSegment
 {
     [JsonPropertyName("type")]
@@ -41,6 +42,11 @@ public class MessageSegment
             File = file, 
             FileId = fileId, 
             FileSize = fileSize 
+        } 
+    };
+    public static ForwardMessageSegment Forward(string id) => new() { 
+        Data = new ForwardData { 
+            Id = id 
         } 
     };
 
@@ -172,6 +178,33 @@ public class FileData
             return $"{size / (1024.0 * 1024.0):F1} MB";
         else
             return $"{size / (1024.0 * 1024.0 * 1024.0):F1} GB";
+    }
+}
+
+/// <summary>
+/// 转发消息段（聊天记录）
+/// </summary>
+public class ForwardMessageSegment : MessageSegment
+{
+    public ForwardMessageSegment() { Type = "forward"; }
+    [JsonPropertyName("data")]
+    public ForwardData? Data { get; set; }
+}
+public class ForwardData
+{
+    [JsonPropertyName("id")]
+    public string Id { get; set; } = string.Empty;
+    
+    /// <summary>
+    /// 获取转发消息的查看URL
+    /// </summary>
+    public string GetViewUrl()
+    {
+        if (string.IsNullOrEmpty(Id))
+            return string.Empty;
+            
+        // QQ转发消息查看URL格式（需要根据实际API调整）
+        return $"文件加载等待开发{Id}";
     }
 }
 
