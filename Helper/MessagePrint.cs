@@ -4,6 +4,7 @@ using static qqbot.Models.Group;
 
 namespace qqbot.Helper;
 
+
 /// <summary>
 /// 一个静态辅助类，用于将消息事件格式化为可读的字符串。
 /// </summary>
@@ -65,16 +66,16 @@ public static class MessagePrint
             // 使用 C# 模式匹配来处理不同类型的消息段
             switch (segment)
             {
-                case TextMessageSegment text: 
+                case TextMessageSegment text:
                     builder.Append(text.Data?.Text);
                     break;
                 case ImageMessageSegment image:
                     builder.Append($"[图片: {image.Data?.File},{image.Data?.Url}]");
                     break;
-                case AtMessageSegment at: 
+                case AtMessageSegment at:
                     builder.Append($"[@{at.Data?.Qq}]");
                     break;
-                case FaceMessageSegment face: 
+                case FaceMessageSegment face:
                     builder.Append($"[表情:{face.Data?.Id}]");
                     break;
                 case FileMessageSegment file:

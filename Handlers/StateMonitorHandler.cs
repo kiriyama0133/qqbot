@@ -504,6 +504,7 @@ public class StateMonitorHandler :
             {
                 PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
                 WriteIndented = false
+                
             });
             
             _logger.LogInformation("生成的插件状态JSON长度: {JsonLength} 字符", jsonResult.Length);
