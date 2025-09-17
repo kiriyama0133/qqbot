@@ -124,10 +124,12 @@ public class Program
         services.Configure<WebSocketSettings>(configuration.GetSection("WebSocketClientSettings"));
         services.Configure<InfluxDBSetting>(configuration.GetSection("InfluxDB"));
         services.Configure<HttpServiceSettings>(configuration.GetSection("HttpServiceSettings"));
+        services.Configure<RedisSetting>(configuration.GetSection("RedisSetting"));
         services.AddHostedService<EventWebSocketClient>();
         services.AddHostedService<CommandRegistry>(); // 
         services.AddSingleton<CommandRegistry>(); // CommandRegistry 现在可以被安全地创建
         services.AddSingleton<InfluxDbService>(); // influx数据库
+        services.AddSingleton<RedisService>(); // redis服务
 
         // 注册 HttpClient 管道
         services.AddTransient<AuthHandler>();
@@ -138,7 +140,6 @@ public class Program
 
         // 注册 ASP.NET Core 框架服务
         services.AddControllers();
-        services.AddSingleton<RedisService>();
 
         var app = builder.Build();
 
