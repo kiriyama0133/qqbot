@@ -159,7 +159,7 @@ public class FileData
             return string.Empty;
             
         // QQ文件下载URL格式（需要根据实际API调整）
-        return $"https://grouptalk.c2c.qq.com/download?file_id={FileId}";
+        return $"未定义,文件api等待补充{FileId}";
     }
     
     /// <summary>
