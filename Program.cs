@@ -13,6 +13,12 @@ namespace qqbot;
 
 public class Program
 {
+    // AddHttpMessageHandler<T> 是泛型方法，通过反射调用它
+    private static void AddHttpMessageHandlerHelper<T>(IServiceCollection services, string clientName) where T : DelegatingHandler
+    {
+        services.AddHttpClient(clientName).AddHttpMessageHandler<T>();
+    }
+
     public static void Main(string[] args)
     {
         var builder = WebApplication.CreateBuilder(args);
@@ -54,7 +60,7 @@ public class Program
         {
             try
             {
-                // 注册插件中的服务类型
+                // 注册插件中的服务类型------------------------------------------------------------------------------
                 var serviceTypes = assembly.GetTypes()
                     .Where(t => typeof(IPluginService).IsAssignableFrom(t) && !t.IsInterface && !t.IsAbstract);
 
@@ -71,7 +77,30 @@ public class Program
                     }
                 }
 
-                // 调用插件的 ConfigureServices 方法
+                // 拦截器捕获和注册---------------------------------------------------------------------------------
+                var interceptorTypes = assembly.GetTypes().Where(t => t.IsSubclassOf(typeof(DelegatingHandler)) && t.GetCustomAttribute<HttpClientInterceptorAttribute>() != null);
+                foreach (var item in interceptorTypes)
+                {
+                    var attribute = item.GetCustomAttribute<HttpClientInterceptorAttribute>();
+                    if (attribute == null) {
+                        continue; // 如果没有特性，跳过
+                    }
+                    
+                    try
+                    {
+                        services.AddTransient(item);
+                        string clientName = attribute.Target.ToString();
+                        var addHandlerMethod = typeof(HttpClientBuilderExtensions).GetMethod(nameof(AddHttpMessageHandlerHelper), BindingFlags.NonPublic | BindingFlags.Static).MakeGenericMethod(item);
+                        addHandlerMethod.Invoke(null, new object[] { services, clientName });
+                        Console.WriteLine($"  -> 已注册HTTP拦截器: {item.Name} -> {clientName}");
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"  -> 注册HTTP拦截器 {item.Name} 时发生错误: {ex.Message}");
+                    }
+                }
+
+                // 调用插件的 ConfigureServices 方法--------------------------------------------------------------
                 var pluginModuleTypes = assembly.GetTypes()
                     .Where(t => typeof(BotPluginModule).IsAssignableFrom(t) && !t.IsInterface && !t.IsAbstract);
 
@@ -128,7 +157,7 @@ public class Program
         services.AddHostedService<EventWebSocketClient>();
         services.AddHostedService<CommandRegistry>(); // 
         services.AddSingleton<CommandRegistry>(); // CommandRegistry 现在可以被安全地创建
-        services.AddSingleton<InfluxDbService>(); // influx数据库
+        services.AddTransient<InfluxDbService>(); // influx数据库
         services.AddSingleton<RedisService>(); // redis服务
         services.AddSingleton<RedisManager>(); 
         services.AddTransient<FileCacheHttpService>(); // 下载文件的服务
