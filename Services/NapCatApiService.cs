@@ -1,7 +1,7 @@
 ﻿using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using qqbot.Models;
+using qqbot.Models.Config;
 using System;
 using System.Net.Http;
 using System.Net.Http.Json;

@@ -1,5 +1,5 @@
-﻿using qqbot.Helper.HttpHandlers;
-using qqbot.Models;
+﻿using qqbot.Handlers.HttpHandlers;
+using qqbot.Models.Messages;
 using qqbot.Models.Request;
 using qqbot.Models.Response;
 

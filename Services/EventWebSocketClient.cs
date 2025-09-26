@@ -2,8 +2,9 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using qqbot.Helper;
-using qqbot.Models;
+using qqbot.Handlers;
+using qqbot.Models.Events;
+using qqbot.Models.Config;
 using qqbot.Models.Notifications;
 using System;
 using System.Net.WebSockets;
@@ -11,7 +12,6 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using static qqbot.Models.Group;
 namespace qqbot.Services;
 
 public class EventWebSocketClient : IHostedService,IDisposable

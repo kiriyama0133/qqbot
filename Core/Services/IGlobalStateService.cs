@@ -1,25 +1,30 @@
 ﻿namespace qqbot.Core.Services;
 
+/// <summary>
+/// 全局状态服务接口 - 管理应用的全局状态（AppState）
+/// </summary>
 public interface IGlobalStateService
 {
     /// <summary>
-    /// 获取当前状态的快照
+    /// 当前状态快照
     /// </summary>
     AppState CurrentState { get; }
 
     /// <summary>
-    /// 原子性地更新状态
+    /// 原子性更新状态
     /// </summary>
-    /// <param name="updater">一个接收旧状态并返回新状态的函数</param>
+    /// <param name="updater">状态更新函数：接收旧状态，返回新状态</param>
     void UpdateState(Func<AppState, AppState> updater);
 
     /// <summary>
-    /// 获取一个可订阅的状态流，每次状态变化都会推送新状态
+    /// 状态变化可观察流
     /// </summary>
     IObservable<AppState> StateObservable { get; }
 
     /// <summary>
-    /// 选择并订阅状态的某个“部分”，只有当这部分变化时才会收到通知
+    /// 选择状态的一部分进行观察，仅在该部分变化时推送
     /// </summary>
+    /// <typeparam name="T">选择的状态类型</typeparam>
+    /// <param name="selector">状态选择器函数</param>
     IObservable<T> Select<T>(Func<AppState, T> selector);
 }

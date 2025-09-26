@@ -1,5 +1,5 @@
 ﻿using MediatR;
-using static qqbot.Models.Group;
+using qqbot.Models.Events;
 
 namespace qqbot.Models.Notifications;
 

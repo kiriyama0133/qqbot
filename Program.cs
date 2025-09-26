@@ -1,165 +1,58 @@
-﻿using Microsoft.Extensions.DependencyInjection;
-using qqbot.Abstractions;
-using qqbot.Helper;
-using qqbot.Helper.HttpHandlers;
-using qqbot.Models;
+﻿using Extensions;
+using Microsoft.EntityFrameworkCore;
+using qqbot.Core.Services;
+using qqbot.Data;
+using qqbot.Handlers.HttpHandlers;
+using qqbot.Models.Config;
 using qqbot.Services;
-using qqbot.Services.Plugins; // 添加Python插件服务
-using System.Reflection;
-using System.Net.Http;
-using qqbot.Core.Services; // 确保 using
-using qqbot.RedisCache;
+using qqbot.Services.Images;
+using qqbot.Services.Plugins;
+using System.Threading.Tasks;
+
 namespace qqbot;
 
 public class Program
 {
-    // AddHttpMessageHandler<T> 是泛型方法，通过反射调用它
-    private static void AddHttpMessageHandlerHelper<T>(IServiceCollection services, string clientName) where T : DelegatingHandler
+    public static async Task Main(string[] args)
     {
-        services.AddHttpClient(clientName).AddHttpMessageHandler<T>();
-    }
-
-    public static void Main(string[] args)
-    {
-        var builder = WebApplication.CreateBuilder(args);
+        var builder = Host.CreateApplicationBuilder(args);
+        builder.AddServiceDefaults();
+        builder.AddNpgsqlDbContext<MessageDbContext>("botDb");
         var services = builder.Services;
         var configuration = builder.Configuration;
 
-        services.AddMemoryCache(); // 添加内存缓存
+        services.AddMemoryCache();
         services.AddSingleton<IGlobalStateService, GlobalStateService>(); // 添加全局状态服务
         services.AddSingleton<IDynamicStateService, DynamicStateService>(); // 添加动态状态服务
         services.AddSingleton<StateMonitorService>(); // 添加状态监控服务
+        services.AddTransient<FileCacheHttpService>(); // 添加文件缓存服务
+        services.AddSingleton<ImageDownloadCache>(); // 添加图片下载缓存服务
+        services.AddTransient<ImageCacheHelper>(); // 添加图片缓存辅助服务
         services.AddHostedService<StateMonitorService>(provider => provider.GetRequiredService<StateMonitorService>()); // 添加状态监控服务作为后台服务
         
-        // 注册Python插件管理服务
-        Console.WriteLine("注册Python插件管理服务...");
-        services.AddSingleton<PluginDiscoveryService>(); // 插件发现服务
-        services.AddSingleton<PythonEnvManager>(); // Python环境管理器
-        services.AddSingleton<PythonProcessManager>(); // Python进程管理器
-        services.AddSingleton<PluginStateManager>(); // 插件状态管理器
-        Console.WriteLine("  -> Python插件管理服务注册完成");
+        // 注册插件管理服务
+        services.AddSingleton<PluginStateManager>();
+        services.AddSingleton<PluginServiceRegistrar>();
 
-        // 注册主程序和插件的Handlers
-        Console.WriteLine("开始注册命令处理器...");
+        // 注册插件和命令处理器
+        var loggerFactory = LoggerFactory.Create(builder => builder.AddConsole());
+        var pluginRegistrar = new PluginServiceRegistrar(
+            loggerFactory.CreateLogger<PluginServiceRegistrar>());
         var mainAssembly = typeof(Program).Assembly;
         
-        // 注册主程序的命令处理器
-        var mainCommandHandlerTypes = mainAssembly.GetTypes()
-            .Where(t => typeof(ICommandHandler).IsAssignableFrom(t) && !t.IsInterface && !t.IsAbstract);
+        pluginRegistrar.RegisterMainCommandHandlers(services, mainAssembly);
+        var pluginAssemblies = pluginRegistrar.RegisterPluginServices(services, configuration);
+        pluginRegistrar.RegisterMediatR(services, mainAssembly, pluginAssemblies);
 
-        foreach (var handlerType in mainCommandHandlerTypes)
-        {
-            services.AddTransient(typeof(ICommandHandler), handlerType);
-            Console.WriteLine($"  -> 已注册主程序命令处理器: {handlerType.Name}");
-        }
-
-        // 发现并注册插件程序集中的命令处理器
-        Console.WriteLine("发现并注册插件命令处理器...");
-        var pluginAssemblies = PluginLoaderExtensions.DiscoverPluginAssemblies();
-        foreach (var assembly in pluginAssemblies)
-        {
-            try
-            {
-                // 注册插件中的服务类型------------------------------------------------------------------------------
-                var serviceTypes = assembly.GetTypes()
-                    .Where(t => typeof(IPluginService).IsAssignableFrom(t) && !t.IsInterface && !t.IsAbstract);
-
-                foreach (var serviceType in serviceTypes)
-                {
-                    try
-                    {
-                        services.AddScoped(serviceType);
-                        Console.WriteLine($"  -> 已注册插件服务: {serviceType.Name} (来自 {assembly.GetName().Name})");
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine($"  -> 注册插件服务 {serviceType.Name} 时发生错误: {ex.Message}");
-                    }
-                }
-
-                // 拦截器捕获和注册---------------------------------------------------------------------------------
-                var interceptorTypes = assembly.GetTypes().Where(t => t.IsSubclassOf(typeof(DelegatingHandler)) && t.GetCustomAttribute<HttpClientInterceptorAttribute>() != null);
-                foreach (var item in interceptorTypes)
-                {
-                    var attribute = item.GetCustomAttribute<HttpClientInterceptorAttribute>();
-                    if (attribute == null) {
-                        continue; // 如果没有特性，跳过
-                    }
-                    
-                    try
-                    {
-                        services.AddTransient(item);
-                        string clientName = attribute.Target.ToString();
-                        var addHandlerMethod = typeof(HttpClientBuilderExtensions).GetMethod(nameof(AddHttpMessageHandlerHelper), BindingFlags.NonPublic | BindingFlags.Static).MakeGenericMethod(item);
-                        addHandlerMethod.Invoke(null, new object[] { services, clientName });
-                        Console.WriteLine($"  -> 已注册HTTP拦截器: {item.Name} -> {clientName}");
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine($"  -> 注册HTTP拦截器 {item.Name} 时发生错误: {ex.Message}");
-                    }
-                }
-
-                // 调用插件的 ConfigureServices 方法--------------------------------------------------------------
-                var pluginModuleTypes = assembly.GetTypes()
-                    .Where(t => typeof(BotPluginModule).IsAssignableFrom(t) && !t.IsInterface && !t.IsAbstract);
-
-                foreach (var moduleType in pluginModuleTypes)
-                {
-                    try
-                    {
-                        // 创建插件模块实例并调用 ConfigureServices
-                        var moduleInstance = Activator.CreateInstance(moduleType, 
-                            new object[] { null, null }) as BotPluginModule; // 传入 null 参数，因为我们使用服务定位器
-                        
-                        if (moduleInstance != null)
-                        {
-                            moduleInstance.ConfigureServices(services, configuration);
-                            Console.WriteLine($"  -> 已配置插件服务: {moduleType.Name} (来自 {assembly.GetName().Name})");
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine($"  -> 配置插件服务 {moduleType.Name} 时发生错误: {ex.Message}");
-                    }
-                }
-
-                // 然后注册命令处理器
-                var pluginHandlerTypes = assembly.GetTypes()
-                    .Where(t => typeof(ICommandHandler).IsAssignableFrom(t) && !t.IsInterface && !t.IsAbstract);
-
-                foreach (var handlerType in pluginHandlerTypes)
-                {
-                    services.AddTransient(typeof(ICommandHandler), handlerType);
-                    Console.WriteLine($"  -> 已注册插件命令处理器: {handlerType.Name} (来自 {assembly.GetName().Name})");
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"  -> 扫描插件程序集 {assembly.GetName().Name} 时发生错误: {ex.Message}");
-            }
-        }
-
-        // 注册主程序和插件的MediatR
-        services.AddMediatR(cfg => {
-            cfg.RegisterServicesFromAssembly(mainAssembly);
-            foreach (var assembly in pluginAssemblies)
-            {
-                cfg.RegisterServicesFromAssembly(assembly);
-            }
-        });
-
-        // 注册主程序的核心服务和配置
         services.Configure<WebSocketSettings>(configuration.GetSection("WebSocketClientSettings"));
-        services.Configure<InfluxDBSetting>(configuration.GetSection("InfluxDB"));
         services.Configure<HttpServiceSettings>(configuration.GetSection("HttpServiceSettings"));
-        services.Configure<RedisSetting>(configuration.GetSection("RedisSetting"));
+        
+        // 验证配置，确保所有必需配置都存在
+        ValidateConfiguration(configuration);
         services.AddHostedService<EventWebSocketClient>();
-        services.AddHostedService<CommandRegistry>(); // 
+        services.AddHostedService<CommandRegistry>(); 
+        services.AddScoped<MessageDbContext>();
         services.AddSingleton<CommandRegistry>(); // CommandRegistry 现在可以被安全地创建
-        services.AddTransient<InfluxDbService>(); // influx数据库
-        services.AddSingleton<RedisService>(); // redis服务
-        services.AddSingleton<RedisManager>(); 
         services.AddTransient<FileCacheHttpService>(); // 下载文件的服务
 
         // 注册 HttpClient 管道
@@ -169,16 +62,9 @@ public class Program
             .AddHttpMessageHandler<ErrorAndLoggingHandler>()
             .AddHttpMessageHandler<AuthHandler>();
 
-        // 注册 ASP.NET Core 框架服务
-        services.AddControllers();
-
         var app = builder.Build();
-
-        // 在应用构建完成后，DI 容器完全可用，此时再初始化插件系统
         Console.WriteLine("开始初始化插件系统...");
         var pluginStateManager = app.Services.GetRequiredService<PluginStateManager>();
-        
-        // 异步初始化插件系统
         _ = Task.Run(async () =>
         {
             try
@@ -192,16 +78,44 @@ public class Program
             }
         });
 
-
-        // 配置 HTTP 请求管道
-        if (app.Environment.IsDevelopment())
-        {
-            // 可选，添加 Swagger 等开发工具
-        }
-        app.UseRouting();
-        app.MapControllers();
+        await MigrationToPostgres(app);
 
         // 运行应用
         app.Run();
+    }
+
+    public static async Task MigrationToPostgres(IHost app)
+    {
+        using var scope = app.Services.CreateScope();
+        var services = scope.ServiceProvider;
+        try
+        {
+            var context = services.GetRequiredService<MessageDbContext>();
+            await context.Database.MigrateAsync();
+        }
+        catch (Exception ex)
+        {
+            var logger = services.GetRequiredService<ILogger<Program>>();
+            logger.LogError(ex, "An error occurred during migration");
+        }
+    }
+    
+    /// <summary>
+    /// 验证配置，确保所有必需配置都存在
+    /// </summary>
+    private static void ValidateConfiguration(IConfiguration configuration)
+    {
+        // 验证 WebSocketSettings
+        var wsSection = configuration.RequireSection("WebSocketClientSettings");
+        wsSection.RequireProperty("Host", "WebSocketClientSettings");
+        wsSection.RequireNumericProperty("Port", "WebSocketClientSettings");
+        wsSection.RequireProperty("Token", "WebSocketClientSettings");
+        wsSection.RequireNumericProperty("HeartbeatInterval", "WebSocketClientSettings");
+        
+        // 验证 HttpServiceSettings
+        var httpSection = configuration.RequireSection("HttpServiceSettings");
+        httpSection.RequireProperty("Host", "HttpServiceSettings");
+        httpSection.RequireNumericProperty("Port", "HttpServiceSettings");
+        httpSection.RequireProperty("Token", "HttpServiceSettings");
     }
 }

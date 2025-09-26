@@ -1,7 +1,7 @@
 namespace qqbot.Core.Services;
 
 /// <summary>
-/// 插件系统相关的状态键定义
+/// 插件系统状态键常量
 /// </summary>
 public static class PluginStateKeys
 {
@@ -16,21 +16,6 @@ public static class PluginStateKeys
     public const string PluginAssemblies = "Plugins.Assemblies";
     
     /// <summary>
-    /// Python环境管理器状态
-    /// </summary>
-    public const string PythonEnvManager = "Plugins.PythonEnvManager";
-    
-    /// <summary>
-    /// Python进程管理器状态
-    /// </summary>
-    public const string PythonProcessManager = "Plugins.PythonProcessManager";
-    
-    /// <summary>
-    /// Python进程池状态
-    /// </summary>
-    public const string PythonProcessPools = "Plugins.PythonProcessPools";
-    
-    /// <summary>
     /// 插件加载状态
     /// </summary>
     public const string PluginLoadingStatus = "Plugins.LoadingStatus";
@@ -42,17 +27,17 @@ public static class PluginStateKeys
 }
 
 /// <summary>
-/// 全局状态监控相关的状态键定义
+/// 状态监控服务状态键常量
 /// </summary>
 public static class StateMonitorKeys
 {
     /// <summary>
-    /// 状态监控配置
+    /// 监控配置
     /// </summary>
     public const string MonitorConfig = "StateMonitor.Config";
     
     /// <summary>
-    /// 状态监控状态
+    /// 监控状态
     /// </summary>
     public const string MonitorStatus = "StateMonitor.Status";
     

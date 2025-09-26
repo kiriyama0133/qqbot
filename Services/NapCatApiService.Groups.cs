@@ -1,5 +1,6 @@
-﻿using qqbot.Helper.HttpHandlers;
-using qqbot.Models;
+﻿using qqbot.Handlers.HttpHandlers;
+using qqbot.Models.Entities;
+using qqbot.Models.Response;
 
 namespace qqbot.Services;
 

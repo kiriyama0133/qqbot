@@ -6,7 +6,7 @@ namespace qqbot.Core.Services;
 public class StateMonitorConfig
 {
     /// <summary>
-    /// 是否启用状态监控
+    /// 是否启用监控
     /// </summary>
     public bool IsEnabled { get; set; } = true;
 
@@ -21,7 +21,7 @@ public class StateMonitorConfig
     public bool ShowDetailedInfo { get; set; } = false;
 
     /// <summary>
-    /// 是否只显示有变化的状态
+    /// 是否仅显示有变化的状态
     /// </summary>
     public bool OnlyShowChanges { get; set; } = false;
 

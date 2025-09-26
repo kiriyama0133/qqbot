@@ -1,5 +1,4 @@
 ﻿using System.Text.Json.Serialization;
-using static qqbot.Models.SharedMessageModels;
 
 namespace qqbot.Models.Response;
 

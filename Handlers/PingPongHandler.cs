@@ -1,6 +1,6 @@
 ﻿using MediatR;
 using qqbot.Abstractions;
-using qqbot.Models;
+using qqbot.Models.Messages;
 using qqbot.Models.Notifications;
 using qqbot.Services;
 

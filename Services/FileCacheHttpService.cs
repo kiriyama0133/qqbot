@@ -103,6 +103,30 @@ namespace qqbot.Services // 请确保命名空间正确
             }
         }
 
+        // examine the file type using head
+        public async Task<string?> GetFileContentTypeAsync(string url, CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                using var request = new HttpRequestMessage(HttpMethod.Head, url);
+                using var response = await _httpClient.SendAsync(request, cancellationToken);
+                response.EnsureSuccessStatusCode();
+                return response.Content.Headers.ContentType?.MediaType;
+            }
+            catch (HttpRequestException ex) when (ex.StatusCode != null)
+            {
+                // 服务器返回了 4xx/5xx 
+                _logger.LogWarning("获取文件内容类型失败，HTTP 状态码: {StatusCode} URL: {Url}", ex.StatusCode, url);
+                return null;
+            }
+            catch (Exception ex)
+            {
+                // 其他网络连接错误或意外错误
+                _logger.LogError(ex, "获取文件内容类型失败: {Url}", url);
+                return null;
+            }
+        }
+
         public void Dispose()
         {
             // 正确实现 Dispose

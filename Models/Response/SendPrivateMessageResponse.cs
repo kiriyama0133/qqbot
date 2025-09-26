@@ -1,5 +1,5 @@
 ﻿using System.Text.Json.Serialization;
-using static qqbot.Models.SharedMessageModels;
+
 namespace qqbot.Models.Response;
 
 // 这个模型用于解析 NapCat 返回的 JSON 响应体

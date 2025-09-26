@@ -1,7 +1,7 @@
 using MediatR;
 using qqbot.Abstractions;
 using qqbot.Core.Services;
-using qqbot.Models;
+using qqbot.Models.Messages;
 using qqbot.Models.Notifications;
 using qqbot.Services;
 using qqbot.Services.Plugins;
@@ -22,7 +22,6 @@ public class StateMonitorHandler :
     private readonly StateMonitorService _stateMonitorService;
     private readonly IDynamicStateService _stateService;
     private readonly NapCatApiService _napCatApiService;
-    private readonly PythonProcessManager _pythonProcessManager;
 
     public CommandDefinition Command { get; } = new()
     {
@@ -75,12 +74,6 @@ public class StateMonitorHandler :
                 Name = "config",
                 Description = "查看监控配置",
                 Aliases = new List<string> { "配置", "settings" }
-            },
-            new CommandDefinition
-            {
-                Name = "image",
-                Description = "获取进程监控状况图片",
-                Aliases = new List<string> { "图片", "图", "render" }
             }
         }
     };
@@ -89,14 +82,12 @@ public class StateMonitorHandler :
         ILogger<StateMonitorHandler> logger,
         StateMonitorService stateMonitorService,
         IDynamicStateService stateService,
-        NapCatApiService napCatApiService,
-        PythonProcessManager pythonProcessManager)
+        NapCatApiService napCatApiService)
     {
         _logger = logger;
         _stateMonitorService = stateMonitorService;
         _stateService = stateService;
         _napCatApiService = napCatApiService;
-        _pythonProcessManager = pythonProcessManager;
     }
 
     public async Task Handle(GroupMessageReceivedNotification notification, CancellationToken cancellationToken)
@@ -149,7 +140,7 @@ public class StateMonitorHandler :
             var parts = message.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
             if (parts.Length < 2)
             {
-                return ("用法: /monitor <子命令>\n可用子命令: status, enable, disable, interval, trigger, config, image", null);
+                return ("用法: /monitor <子命令>\n可用子命令: status, enable, disable, interval, trigger, config", null);
             }
 
             var subCommand = parts[1].ToLower();
@@ -161,8 +152,7 @@ public class StateMonitorHandler :
                 "interval" or "间隔" or "time" => (SetMonitorInterval(parts), null),
                 "trigger" or "触发" or "now" => (TriggerMonitor(), null),
                 "config" or "配置" or "settings" => (GetMonitorConfig(), null),
-                "image" or "图片" or "图" or "render" => await GetMonitorImage(),
-                _ => ("未知子命令。可用命令: status, enable, disable, interval, trigger, config, image", null)
+                _ => ("未知子命令。可用命令: status, enable, disable, interval, trigger, config", null)
             };
         }
         catch (Exception ex)
@@ -237,304 +227,5 @@ public class StateMonitorHandler :
         return configText;
     }
 
-    private async Task<(string Message, string? ImagePath)> GetMonitorImage()
-    {
-        try
-        {
-            var pluginId = "process-monitor-renderer";
-            var scriptPath = Path.Combine(AppContext.BaseDirectory, "ExtensionsEntry", pluginId, "main.py");
-            
-            if (!File.Exists(scriptPath))
-            {
-                return ("进程监控渲染器插件未找到，请确保插件已正确安装", null);
-            }
-
-            // 获取Python可执行文件路径
-            var pythonExePath = GetPythonExecutablePath(pluginId);
-            if (string.IsNullOrEmpty(pythonExePath))
-            {
-                return ("未找到Python可执行文件，请检查插件环境配置", null);
-            }
-
-            // 获取插件状态信息
-            var pluginStateJson = GetPluginStateJson();
-            
-            // 使用PythonProcessManager执行脚本（复用进程池）
-            var result = await ExecutePythonScriptWithPoolAsync(pluginId, pythonExePath, scriptPath, pluginStateJson);
-            
-            if (result.Success && !string.IsNullOrEmpty(result.Output))
-            {
-                try
-                {
-                    // 解析JSON输出
-                    var jsonResult = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object>>(result.Output);
-                    
-                    if (jsonResult != null && jsonResult.ContainsKey("success") && 
-                        jsonResult["success"].ToString() == "True")
-                    {
-                        var imagePath = jsonResult.ContainsKey("image_path") ? jsonResult["image_path"].ToString() : "";
-                        var message = jsonResult.ContainsKey("message") ? jsonResult["message"].ToString() : "图片生成成功";
-                        
-                        if (!string.IsNullOrEmpty(imagePath) && File.Exists(imagePath))
-                        {
-                            return ($"[成功] {message}", imagePath);
-                        }
-                        else
-                        {
-                            return ($"[警告] {message}，但图片文件未找到", null);
-                        }
-                    }
-                    else
-                    {
-                        var errorMessage = jsonResult?.ContainsKey("message") == true ? 
-                            jsonResult["message"].ToString() : "未知错误";
-                        return ($"[错误] 图片生成失败: {errorMessage}", null);
-                    }
-                }
-                catch (Exception jsonEx)
-                {
-                    _logger.LogError(jsonEx, "解析Python脚本输出时发生错误: {Output}", result.Output);
-                    return ($"[警告] 图片生成完成，但解析结果时出错: {jsonEx.Message}", null);
-                }
-            }
-            else
-            {
-                var errorMsg = result.Error ?? "未知错误";
-                return ($"[错误] 执行Python脚本失败: {errorMsg}", null);
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "生成监控图片时发生错误");
-            return ($"生成图片时发生错误: {ex.Message}", null);
-        }
-    }
-
-    private async Task<(bool Success, string Output, string Error)> ExecutePythonScriptWithPoolAsync(string pluginId, string pythonExePath, string scriptPath, string? pluginStateJson = null)
-    {
-        try
-        {
-            // 由于PythonProcessPool的进程已经使用了异步输出流，我们回退到直接执行方式
-            // 这样可以避免混合同步和异步操作的问题
-            return await ExecutePythonScriptAsync(pythonExePath, scriptPath, pluginStateJson);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "使用进程池执行Python脚本时发生异常");
-            return (false, "", ex.Message);
-        }
-    }
-
-    private async Task<(bool Success, string Output, string Error)> ExecutePythonScriptAsync(string pythonExePath, string scriptPath, string? pluginStateJson = null)
-    {
-        string? tempJsonFile = null;
-        try
-        {
-            var arguments = $"\"{scriptPath}\"";
-            
-            if (!string.IsNullOrEmpty(pluginStateJson))
-            {
-                // 创建临时JSON文件来传递插件状态数据
-                tempJsonFile = Path.Combine(Path.GetTempPath(), $"plugin_state_{Guid.NewGuid():N}.json");
-                await File.WriteAllTextAsync(tempJsonFile, pluginStateJson, System.Text.Encoding.UTF8);
-                arguments += $" \"{tempJsonFile}\"";
-                
-                _logger.LogDebug("创建临时JSON文件: {TempFile}", tempJsonFile);
-            }
-
-            var startInfo = new ProcessStartInfo
-            {
-                FileName = pythonExePath,
-                Arguments = arguments,
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true,
-                StandardOutputEncoding = System.Text.Encoding.UTF8,
-                StandardErrorEncoding = System.Text.Encoding.UTF8,
-                WorkingDirectory = Path.GetDirectoryName(scriptPath)
-            };
-
-            using var process = new Process { StartInfo = startInfo };
-            
-            _logger.LogDebug("执行Python脚本: {PythonExe} {ScriptPath}", pythonExePath, scriptPath);
-            
-            process.Start();
-            
-            var outputTask = process.StandardOutput.ReadToEndAsync();
-            var errorTask = process.StandardError.ReadToEndAsync();
-            
-            await process.WaitForExitAsync();
-            
-            var output = await outputTask;
-            var error = await errorTask;
-            
-            if (process.ExitCode == 0)
-            {
-                return (true, output, error);
-            }
-            else
-            {
-                _logger.LogError("Python脚本执行失败，退出码: {ExitCode}, 错误: {Error}", process.ExitCode, error);
-                return (false, output, error);
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "执行Python脚本时发生异常");
-            return (false, "", ex.Message);
-        }
-        finally
-        {
-            // 清理临时文件
-            if (!string.IsNullOrEmpty(tempJsonFile) && File.Exists(tempJsonFile))
-            {
-                try
-                {
-                    File.Delete(tempJsonFile);
-                    _logger.LogDebug("删除临时JSON文件: {TempFile}", tempJsonFile);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "删除临时JSON文件失败: {TempFile}", tempJsonFile);
-                }
-            }
-        }
-    }
-
-    private string GetPluginStateJson()
-    {
-        try
-        {
-            // 从状态服务获取插件信息
-            var pluginSystemState = _stateService.GetState<PluginSystemState>(PluginStateKeys.DiscoveredPlugins);
-            
-            _logger.LogInformation("获取插件系统状态: LoadingStatus={LoadingStatus}, DiscoveredPluginsCount={Count}", 
-                pluginSystemState?.LoadingStatus, pluginSystemState?.DiscoveredPlugins?.Count ?? 0);
-            
-            if (pluginSystemState?.DiscoveredPlugins == null)
-            {
-                _logger.LogWarning("插件系统状态为空或未发现插件");
-                return "{}";
-            }
-
-            // 构建插件状态信息
-            var activePlugins = new List<object>();
-            var allProcessPools = new List<PythonProcessPoolState>();
-            
-            foreach (var plugin in pluginSystemState.DiscoveredPlugins.Where(p => p.Type == PluginType.Python))
-            {
-                // 获取该插件的进程池状态
-                var poolStateKey = $"{PluginStateKeys.PythonProcessPools}.{plugin.Id}";
-                var pluginPoolState = _stateService.GetState<PythonProcessPoolState>(poolStateKey);
-                
-                // 详细记录插件元数据
-                _logger.LogInformation("处理插件: Id={PluginId}, Name={PluginName}, Type={PluginType}, Version={Version}, Description={Description}, Author={Author}", 
-                    plugin.Id, plugin.Name, plugin.Type, plugin.Version, plugin.Description, plugin.Author);
-                
-                _logger.LogInformation("插件文件信息: MainScript={MainScript}, PythonFiles={PythonCount}, DllFiles={DllCount}, ConfigFiles={ConfigCount}, Dependencies={DependencyCount}", 
-                    plugin.MainScript, plugin.PythonFiles?.Length ?? 0, plugin.DllFiles?.Length ?? 0, 
-                    plugin.ConfigFiles?.Length ?? 0, plugin.Dependencies?.Length ?? 0);
-                
-                if (pluginPoolState != null)
-                {
-                    allProcessPools.Add(pluginPoolState);
-                    _logger.LogInformation("插件进程池状态: PoolKey={PoolKey}, TotalWorkers={TotalWorkers}, ActiveWorkers={ActiveWorkers}, IdleWorkers={IdleWorkers}, IsHealthy={IsHealthy}", 
-                        pluginPoolState.PoolKey, pluginPoolState.TotalWorkers, pluginPoolState.ActiveWorkers, 
-                        pluginPoolState.IdleWorkers, pluginPoolState.IsHealthy);
-                }
-                else
-                {
-                    _logger.LogWarning("插件 {PluginId} 没有找到进程池状态", plugin.Id);
-                }
-                
-                // 即使没有进程池状态，也要使用真实的插件元数据
-                var isRunning = pluginPoolState != null && pluginPoolState.ActiveWorkers > 0;
-                var processCount = pluginPoolState?.ActiveWorkers ?? 0;
-                
-                // 如果没有进程池状态，但插件存在，我们仍然应该显示插件信息
-                // 只是标记为"空闲"状态
-                
-                activePlugins.Add(new
-                {
-                    name = plugin.Id,
-                    display_name = plugin.Name ?? plugin.Id,
-                    status = isRunning ? "running" : "idle",
-                    processes = processCount,
-                    type = plugin.Type.ToString(),
-                    version = plugin.Version ?? "未知版本",
-                    description = plugin.Description ?? "无描述",
-                    author = plugin.Author ?? "未知作者",
-                    main_script = plugin.MainScript ?? "无主脚本",
-                    python_files_count = plugin.PythonFiles?.Length ?? 0,
-                    dll_files_count = plugin.DllFiles?.Length ?? 0,
-                    config_files_count = plugin.ConfigFiles?.Length ?? 0,
-                    dependencies = plugin.Dependencies ?? Array.Empty<string>(),
-                    pool_info = pluginPoolState != null ? new
-                    {
-                        total_workers = pluginPoolState.TotalWorkers,
-                        active_workers = pluginPoolState.ActiveWorkers,
-                        idle_workers = pluginPoolState.IdleWorkers,
-                        is_healthy = pluginPoolState.IsHealthy
-                    } : null
-                });
-            }
-
-            var runningPlugins = activePlugins.Count(p => ((dynamic)p).status == "running");
-            var idlePlugins = activePlugins.Count(p => ((dynamic)p).status == "idle");
-            
-            var pluginStatus = new
-            {
-                total_plugins = pluginSystemState.DiscoveredPlugins.Count,
-                running_plugins = runningPlugins,
-                idle_plugins = idlePlugins,
-                active_plugins = activePlugins.ToArray(),
-                system_info = new
-                {
-                    total_process_pools = allProcessPools.Count,
-                    total_workers = allProcessPools.Sum(p => p.TotalWorkers),
-                    active_workers = allProcessPools.Sum(p => p.ActiveWorkers),
-                    idle_workers = allProcessPools.Sum(p => p.IdleWorkers),
-                    healthy_pools = allProcessPools.Count(p => p.IsHealthy),
-                    last_update = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")
-                }
-            };
-
-            var jsonResult = System.Text.Json.JsonSerializer.Serialize(pluginStatus, new JsonSerializerOptions
-            {
-                PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                WriteIndented = false
-                
-            });
-            
-            _logger.LogInformation("生成的插件状态JSON长度: {JsonLength} 字符", jsonResult.Length);
-            _logger.LogInformation("插件状态统计: 总插件数={TotalPlugins}, 运行中={RunningPlugins}, 空闲={IdlePlugins}, 进程池数={ProcessPoolsCount}", 
-                pluginStatus.total_plugins, pluginStatus.running_plugins, pluginStatus.idle_plugins, pluginStatus.system_info.total_process_pools);
-            
-            return jsonResult;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "获取插件状态JSON时发生错误");
-            return "{}";
-        }
-    }
-
-    private string GetPythonExecutablePath(string pluginId)
-    {
-        // 查找虚拟环境中的Python
-        var venvPath = Path.Combine(AppContext.BaseDirectory, "Envs", pluginId, ".venv");
-        var pythonExe = Path.Combine(venvPath, "Scripts", "python.exe");
-        
-        if (File.Exists(pythonExe))
-        {
-            _logger.LogDebug("找到虚拟环境Python: {PythonExe}", pythonExe);
-            return pythonExe;
-        }
-
-        // 回退到系统Python
-        _logger.LogWarning("未找到虚拟环境Python，使用系统Python");
-        return "python";
-    }
 
 }
